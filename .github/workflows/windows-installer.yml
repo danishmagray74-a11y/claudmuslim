@@ -1,0 +1,47 @@
+name: Build Claude Muslim Windows Installer
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pillow pyinstaller
+      - name: Build standalone application
+        run: pyinstaller --clean --noconfirm --onefile --noconsole --name ClaudeMuslim claude_muslim.py
+      - name: Install Inno Setup
+        run: choco install innosetup --yes --no-progress
+      - name: Build Windows installer
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (!(Test-Path $iscc)) { throw "Inno Setup compiler not found: $iscc" }
+          & $iscc "installer\ClaudeMuslim.iss"
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with exit code $LASTEXITCODE" }
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ClaudeMuslim-Windows-Installer
+          path: output/ClaudeMuslim-Setup.exe
+          if-no-files-found: error
+      - name: Attach installer to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: output/ClaudeMuslim-Setup.exe
